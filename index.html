@@ -1,15 +1,45 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Stickman Raygun Adventure</title>
+    <meta charset="UTF-8">
+    <title>Stickman Jetpack Defender</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
-        canvas { display: block; background: #87CEEB; margin: 0 auto; border: 4px solid #333; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 24px; text-shadow: 2px 2px #000; }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: #1a1a1a; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas { 
+            background: #87CEEB; 
+            border: 5px solid #444;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #ui { 
+            position: absolute; 
+            top: 20px; 
+            left: 50%;
+            transform: translateX(-50%);
+            color: white; 
+            font-size: 20px; 
+            text-shadow: 2px 2px #000;
+            pointer-events: none;
+            width: 760px;
+            display: flex;
+            justify-content: space-between;
+        }
     </style>
 </head>
 <body>
-    <div id="ui">Lives: <span id="lives">3</span> | Score: <span id="score">0</span></div>
+
+    <div id="ui">
+        <div>Lives: <span id="lives">3</span> | Score: <span id="score">0</span></div>
+        <div>JETPACK FUEL</div>
+    </div>
     <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -18,89 +48,132 @@ const ctx = canvas.getContext('2d');
 canvas.width = 800;
 canvas.height = 400;
 
-// Game State
+// --- GAME STATE ---
 let lives = 3;
 let score = 0;
 let gameActive = true;
-const gravity = 0.8;
+const gravity = 0.7;
+const keys = {};
 
-// Player Object
+// --- PLAYER OBJECT ---
 const player = {
-    x: 50, y: 300, w: 30, h: 50,
-    dy: 0, 
-    jumpPower: -15,
+    x: 80, y: 300, w: 30, h: 50,
+    dy: 0,
+    jumpPower: -14,
+    jetPower: -18,
+    fuel: 100,
+    maxFuel: 100,
     grounded: false,
+    isJetting: false,
+    
     draw() {
+        ctx.save();
         ctx.strokeStyle = "black";
         ctx.lineWidth = 3;
-        // Head
+
+        // Draw Jetpack Flames
+        if (this.isJetting) {
+            ctx.fillStyle = Math.random() > 0.5 ? "#FF4500" : "#FFD700";
+            ctx.beginPath();
+            ctx.moveTo(this.x + 2, this.y + 40);
+            ctx.lineTo(this.x + 10, this.y + 65);
+            ctx.lineTo(this.x + 18, this.y + 40);
+            ctx.fill();
+        }
+
+        // Stickman: Head
         ctx.beginPath(); ctx.arc(this.x + 15, this.y, 10, 0, Math.PI * 2); ctx.stroke();
         // Body
         ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 10); ctx.lineTo(this.x + 15, this.y + 35); ctx.stroke();
-        // Arms (Ray gun pose)
+        // Arms (holding raygun)
         ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 20); ctx.lineTo(this.x + 35, this.y + 20); ctx.stroke();
         // Legs
         ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 35); ctx.lineTo(this.x + 5, this.y + 50); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 35); ctx.lineTo(this.x + 25, this.y + 50); ctx.stroke();
+        
         // Ray Gun
-        ctx.fillStyle = "red"; ctx.fillRect(this.x + 30, this.y + 15, 10, 5);
+        ctx.fillStyle = "#333"; ctx.fillRect(this.x + 30, this.y + 15, 12, 6);
+        ctx.fillStyle = "cyan"; ctx.fillRect(this.x + 40, this.y + 16, 4, 4);
+
+        // Jetpack Tank
+        ctx.fillStyle = "#555";
+        ctx.fillRect(this.x + 2, this.y + 15, 10, 25);
+        
+        ctx.restore();
     }
 };
 
 let bullets = [];
 let enemies = [];
-const keys = {};
 
-// Input Handling
+// --- INPUTS ---
 window.addEventListener('keydown', e => {
     keys[e.code] = true;
     if (e.code === 'Space' && gameActive) {
-        bullets.push({ x: player.x + 35, y: player.y + 17, w: 10, h: 4 });
+        bullets.push({ x: player.x + 42, y: player.y + 16, w: 12, h: 4 });
     }
 });
 window.addEventListener('keyup', e => keys[e.code] = false);
 
+// --- SPAWNING ---
 function spawnEnemy() {
     if (!gameActive) return;
-    const type = Math.random() > 0.3 ? 'alien' : 'spike';
+    const isAlien = Math.random() > 0.4;
     enemies.push({
         x: canvas.width,
-        y: type === 'alien' ? 280 + Math.random() * 20 : 320,
+        y: isAlien ? 150 + Math.random() * 150 : 320,
         w: 30, h: 30,
-        type: type,
-        speed: 3 + (score / 10) // Gets faster!
+        type: isAlien ? 'alien' : 'spike',
+        speed: 4 + (score * 0.2)
     });
-    setTimeout(spawnEnemy, Math.max(500, 2000 - score * 10));
+    // Set next spawn
+    setTimeout(spawnEnemy, Math.max(600, 2000 - (score * 50)));
 }
 
+// --- CORE UPDATE ---
 function update() {
     if (!gameActive) return;
 
-    // Jump Logic
+    // Normal Jump
     if (keys['ArrowUp'] && player.grounded) {
         player.dy = player.jumpPower;
         player.grounded = false;
     }
+
+    // Jetpack Burst
+    if (keys['ArrowDown'] && player.fuel > 25) {
+        player.dy = player.jetPower;
+        player.fuel -= 30;
+        player.isJetting = true;
+        player.grounded = false;
+        setTimeout(() => player.isJetting = false, 250);
+        keys['ArrowDown'] = false; // Prevent continuous spamming from one tap
+    }
+
+    // Fuel Regen
+    if (player.fuel < player.maxFuel) player.fuel += 0.3;
+
+    // Physics
     player.dy += gravity;
     player.y += player.dy;
 
-    if (player.y > 320) {
-        player.y = 320;
+    if (player.y > 300) {
+        player.y = 300;
         player.dy = 0;
         player.grounded = true;
     }
 
-    // Bullet Logic
+    // Bullets
     bullets.forEach((b, i) => {
-        b.x += 10;
+        b.x += 12;
         if (b.x > canvas.width) bullets.splice(i, 1);
     });
 
-    // Enemy Logic
+    // Enemies & Collision
     enemies.forEach((en, i) => {
         en.x -= en.speed;
 
-        // Collision: Player vs Enemy
+        // Player Collision
         if (player.x < en.x + en.w && player.x + player.w > en.x &&
             player.y - 10 < en.y + en.h && player.y + player.h > en.y) {
             enemies.splice(i, 1);
@@ -113,7 +186,7 @@ function update() {
             }
         }
 
-        // Collision: Bullet vs Alien
+        // Bullet vs Alien
         bullets.forEach((b, bi) => {
             if (b.x < en.x + en.w && b.x + b.w > en.x && b.y < en.y + en.h && b.y + b.h > en.y) {
                 if (en.type === 'alien') {
@@ -129,26 +202,43 @@ function update() {
     });
 }
 
+// --- DRAW LOOP ---
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Ground
-    ctx.fillStyle = "#654321";
+    // Draw Ground
+    ctx.fillStyle = "#3d2b1f";
     ctx.fillRect(0, 350, canvas.width, 50);
+    ctx.fillStyle = "#2d1b0f";
+    ctx.fillRect(0, 350, canvas.width, 5);
+
+    // Draw Fuel Bar
+    ctx.fillStyle = "#444";
+    ctx.fillRect(680, 60, 100, 15);
+    ctx.fillStyle = player.fuel > 30 ? "#00ff00" : "#ff4444";
+    ctx.fillRect(680, 60, player.fuel, 15);
+    ctx.strokeStyle = "white";
+    ctx.strokeRect(680, 60, 100, 15);
 
     player.draw();
 
-    ctx.fillStyle = "yellow";
-    bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+    // Draw Bullets
+    ctx.fillStyle = "cyan";
+    bullets.forEach(b => {
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.shadowBlur = 10; ctx.shadowColor = "cyan";
+    });
+    ctx.shadowBlur = 0; // Reset shadow
 
+    // Draw Enemies
     enemies.forEach(en => {
-        ctx.fillStyle = en.type === 'alien' ? "#00FF00" : "#777";
         if (en.type === 'alien') {
-            // Draw Alien
-            ctx.beginPath(); ctx.ellipse(en.x + 15, en.y + 15, 15, 10, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "black"; ctx.fillRect(en.x + 10, en.y + 10, 4, 4); ctx.fillRect(en.x + 20, en.y + 10, 4, 4);
+            ctx.fillStyle = "#32CD32";
+            ctx.beginPath(); ctx.ellipse(en.x + 15, en.y + 15, 18, 12, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "black"; ctx.beginPath(); ctx.arc(en.x + 8, en.y + 12, 3, 0, 7); ctx.fill();
+            ctx.beginPath(); ctx.arc(en.x + 22, en.y + 12, 3, 0, 7); ctx.fill();
         } else {
-            // Draw Spike
+            ctx.fillStyle = "#777";
             ctx.beginPath(); ctx.moveTo(en.x, en.y + 30); ctx.lineTo(en.x + 15, en.y); ctx.lineTo(en.x + 30, en.y + 30); ctx.fill();
         }
     });
@@ -157,6 +247,7 @@ function draw() {
     requestAnimationFrame(draw);
 }
 
+// Start Game
 spawnEnemy();
 draw();
 </script>
