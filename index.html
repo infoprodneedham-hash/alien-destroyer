@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stickman Raygun Adventure</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
+        canvas { display: block; background: #87CEEB; margin: 0 auto; border: 4px solid #333; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 24px; text-shadow: 2px 2px #000; }
+    </style>
+</head>
+<body>
+    <div id="ui">Lives: <span id="lives">3</span> | Score: <span id="score">0</span></div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = 800;
+canvas.height = 400;
+
+// Game State
+let lives = 3;
+let score = 0;
+let gameActive = true;
+const gravity = 0.8;
+
+// Player Object
+const player = {
+    x: 50, y: 300, w: 30, h: 50,
+    dy: 0, 
+    jumpPower: -15,
+    grounded: false,
+    draw() {
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 3;
+        // Head
+        ctx.beginPath(); ctx.arc(this.x + 15, this.y, 10, 0, Math.PI * 2); ctx.stroke();
+        // Body
+        ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 10); ctx.lineTo(this.x + 15, this.y + 35); ctx.stroke();
+        // Arms (Ray gun pose)
+        ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 20); ctx.lineTo(this.x + 35, this.y + 20); ctx.stroke();
+        // Legs
+        ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 35); ctx.lineTo(this.x + 5, this.y + 50); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 35); ctx.lineTo(this.x + 25, this.y + 50); ctx.stroke();
+        // Ray Gun
+        ctx.fillStyle = "red"; ctx.fillRect(this.x + 30, this.y + 15, 10, 5);
+    }
+};
+
+let bullets = [];
+let enemies = [];
+const keys = {};
+
+// Input Handling
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'Space' && gameActive) {
+        bullets.push({ x: player.x + 35, y: player.y + 17, w: 10, h: 4 });
+    }
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+function spawnEnemy() {
+    if (!gameActive) return;
+    const type = Math.random() > 0.3 ? 'alien' : 'spike';
+    enemies.push({
+        x: canvas.width,
+        y: type === 'alien' ? 280 + Math.random() * 20 : 320,
+        w: 30, h: 30,
+        type: type,
+        speed: 3 + (score / 10) // Gets faster!
+    });
+    setTimeout(spawnEnemy, Math.max(500, 2000 - score * 10));
+}
+
+function update() {
+    if (!gameActive) return;
+
+    // Jump Logic
+    if (keys['ArrowUp'] && player.grounded) {
+        player.dy = player.jumpPower;
+        player.grounded = false;
+    }
+    player.dy += gravity;
+    player.y += player.dy;
+
+    if (player.y > 320) {
+        player.y = 320;
+        player.dy = 0;
+        player.grounded = true;
+    }
+
+    // Bullet Logic
+    bullets.forEach((b, i) => {
+        b.x += 10;
+        if (b.x > canvas.width) bullets.splice(i, 1);
+    });
+
+    // Enemy Logic
+    enemies.forEach((en, i) => {
+        en.x -= en.speed;
+
+        // Collision: Player vs Enemy
+        if (player.x < en.x + en.w && player.x + player.w > en.x &&
+            player.y - 10 < en.y + en.h && player.y + player.h > en.y) {
+            enemies.splice(i, 1);
+            lives--;
+            document.getElementById('lives').innerText = lives;
+            if (lives <= 0) {
+                gameActive = false;
+                alert("Game Over! Score: " + score);
+                location.reload();
+            }
+        }
+
+        // Collision: Bullet vs Alien
+        bullets.forEach((b, bi) => {
+            if (b.x < en.x + en.w && b.x + b.w > en.x && b.y < en.y + en.h && b.y + b.h > en.y) {
+                if (en.type === 'alien') {
+                    enemies.splice(i, 1);
+                    bullets.splice(bi, 1);
+                    score++;
+                    document.getElementById('score').innerText = score;
+                }
+            }
+        });
+
+        if (en.x < -50) enemies.splice(i, 1);
+    });
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Ground
+    ctx.fillStyle = "#654321";
+    ctx.fillRect(0, 350, canvas.width, 50);
+
+    player.draw();
+
+    ctx.fillStyle = "yellow";
+    bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+
+    enemies.forEach(en => {
+        ctx.fillStyle = en.type === 'alien' ? "#00FF00" : "#777";
+        if (en.type === 'alien') {
+            // Draw Alien
+            ctx.beginPath(); ctx.ellipse(en.x + 15, en.y + 15, 15, 10, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "black"; ctx.fillRect(en.x + 10, en.y + 10, 4, 4); ctx.fillRect(en.x + 20, en.y + 10, 4, 4);
+        } else {
+            // Draw Spike
+            ctx.beginPath(); ctx.moveTo(en.x, en.y + 30); ctx.lineTo(en.x + 15, en.y); ctx.lineTo(en.x + 30, en.y + 30); ctx.fill();
+        }
+    });
+
+    update();
+    requestAnimationFrame(draw);
+}
+
+spawnEnemy();
+draw();
+</script>
+</body>
+</html>
