@@ -18,6 +18,7 @@
             background: #87CEEB; 
             border: 5px solid #444;
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            cursor: pointer;
         }
         #ui { 
             position: absolute; 
@@ -32,6 +33,13 @@
             display: flex;
             justify-content: space-between;
         }
+        #start-prompt {
+            position: absolute;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 20px;
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
@@ -40,6 +48,7 @@
         <div>Lives: <span id="lives">3</span> | Score: <span id="score">0</span></div>
         <div>JETPACK FUEL</div>
     </div>
+    <div id="start-prompt">Click to Start with Sound</div>
     <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -47,6 +56,85 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = 800;
 canvas.height = 400;
+
+// --- AUDIO SYSTEM ---
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx;
+
+function initAudio() {
+    if (!audioCtx) audioCtx = new AudioCtx();
+    document.getElementById('start-prompt').style.display = 'none';
+}
+
+const sounds = {
+    shoot: () => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    },
+    jump: () => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    },
+    jet: () => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(60, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.2);
+    },
+    hit: () => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(10, audioCtx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+    },
+    explode: () => {
+        const noise = audioCtx.createBufferSource();
+        const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.2, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        noise.buffer = buffer;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        noise.start();
+    }
+};
 
 // --- GAME STATE ---
 let lives = 3;
@@ -71,7 +159,6 @@ const player = {
         ctx.strokeStyle = "black";
         ctx.lineWidth = 3;
 
-        // Draw Jetpack Flames
         if (this.isJetting) {
             ctx.fillStyle = Math.random() > 0.5 ? "#FF4500" : "#FFD700";
             ctx.beginPath();
@@ -81,24 +168,15 @@ const player = {
             ctx.fill();
         }
 
-        // Stickman: Head
         ctx.beginPath(); ctx.arc(this.x + 15, this.y, 10, 0, Math.PI * 2); ctx.stroke();
-        // Body
         ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 10); ctx.lineTo(this.x + 15, this.y + 35); ctx.stroke();
-        // Arms (holding raygun)
         ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 20); ctx.lineTo(this.x + 35, this.y + 20); ctx.stroke();
-        // Legs
         ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 35); ctx.lineTo(this.x + 5, this.y + 50); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(this.x + 15, this.y + 35); ctx.lineTo(this.x + 25, this.y + 50); ctx.stroke();
-        
-        // Ray Gun
         ctx.fillStyle = "#333"; ctx.fillRect(this.x + 30, this.y + 15, 12, 6);
         ctx.fillStyle = "cyan"; ctx.fillRect(this.x + 40, this.y + 16, 4, 4);
-
-        // Jetpack Tank
         ctx.fillStyle = "#555";
         ctx.fillRect(this.x + 2, this.y + 15, 10, 25);
-        
         ctx.restore();
     }
 };
@@ -107,10 +185,13 @@ let bullets = [];
 let enemies = [];
 
 // --- INPUTS ---
+window.addEventListener('mousedown', initAudio);
 window.addEventListener('keydown', e => {
+    if (!audioCtx) initAudio();
     keys[e.code] = true;
     if (e.code === 'Space' && gameActive) {
         bullets.push({ x: player.x + 42, y: player.y + 16, w: 12, h: 4 });
+        sounds.shoot();
     }
 });
 window.addEventListener('keyup', e => keys[e.code] = false);
@@ -126,7 +207,6 @@ function spawnEnemy() {
         type: isAlien ? 'alien' : 'spike',
         speed: 4 + (score * 0.2)
     });
-    // Set next spawn
     setTimeout(spawnEnemy, Math.max(600, 2000 - (score * 50)));
 }
 
@@ -134,26 +214,24 @@ function spawnEnemy() {
 function update() {
     if (!gameActive) return;
 
-    // Normal Jump
     if (keys['ArrowUp'] && player.grounded) {
         player.dy = player.jumpPower;
         player.grounded = false;
+        sounds.jump();
     }
 
-    // Jetpack Burst
     if (keys['ArrowDown'] && player.fuel > 25) {
         player.dy = player.jetPower;
         player.fuel -= 30;
         player.isJetting = true;
         player.grounded = false;
+        sounds.jet();
         setTimeout(() => player.isJetting = false, 250);
-        keys['ArrowDown'] = false; // Prevent continuous spamming from one tap
+        keys['ArrowDown'] = false;
     }
 
-    // Fuel Regen
     if (player.fuel < player.maxFuel) player.fuel += 0.3;
 
-    // Physics
     player.dy += gravity;
     player.y += player.dy;
 
@@ -163,21 +241,19 @@ function update() {
         player.grounded = true;
     }
 
-    // Bullets
     bullets.forEach((b, i) => {
         b.x += 12;
         if (b.x > canvas.width) bullets.splice(i, 1);
     });
 
-    // Enemies & Collision
     enemies.forEach((en, i) => {
         en.x -= en.speed;
 
-        // Player Collision
         if (player.x < en.x + en.w && player.x + player.w > en.x &&
             player.y - 10 < en.y + en.h && player.y + player.h > en.y) {
             enemies.splice(i, 1);
             lives--;
+            sounds.hit();
             document.getElementById('lives').innerText = lives;
             if (lives <= 0) {
                 gameActive = false;
@@ -186,13 +262,13 @@ function update() {
             }
         }
 
-        // Bullet vs Alien
         bullets.forEach((b, bi) => {
             if (b.x < en.x + en.w && b.x + b.w > en.x && b.y < en.y + en.h && b.y + b.h > en.y) {
                 if (en.type === 'alien') {
                     enemies.splice(i, 1);
                     bullets.splice(bi, 1);
                     score++;
+                    sounds.explode();
                     document.getElementById('score').innerText = score;
                 }
             }
@@ -206,13 +282,11 @@ function update() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Draw Ground
     ctx.fillStyle = "#3d2b1f";
     ctx.fillRect(0, 350, canvas.width, 50);
     ctx.fillStyle = "#2d1b0f";
     ctx.fillRect(0, 350, canvas.width, 5);
 
-    // Draw Fuel Bar
     ctx.fillStyle = "#444";
     ctx.fillRect(680, 60, 100, 15);
     ctx.fillStyle = player.fuel > 30 ? "#00ff00" : "#ff4444";
@@ -222,15 +296,13 @@ function draw() {
 
     player.draw();
 
-    // Draw Bullets
     ctx.fillStyle = "cyan";
     bullets.forEach(b => {
         ctx.fillRect(b.x, b.y, b.w, b.h);
         ctx.shadowBlur = 10; ctx.shadowColor = "cyan";
     });
-    ctx.shadowBlur = 0; // Reset shadow
+    ctx.shadowBlur = 0; 
 
-    // Draw Enemies
     enemies.forEach(en => {
         if (en.type === 'alien') {
             ctx.fillStyle = "#32CD32";
@@ -247,7 +319,6 @@ function draw() {
     requestAnimationFrame(draw);
 }
 
-// Start Game
 spawnEnemy();
 draw();
 </script>
